@@ -1,5 +1,3 @@
-# default compiler flags
-CFLAGS ?= -std=c11 -Wall -Wextra -pedantic
 # if the env var ADMIN_AES_KEY exists, its value is compiled into the executable
 # if not, it becomes empty string
 CFLAGS += $(if $(ADMIN_AES_KEY),-DADMIN_AES_KEY=\"$(ADMIN_AES_KEY)\",-DADMIN_AES_KEY=\"\")

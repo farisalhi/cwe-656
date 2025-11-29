@@ -86,7 +86,7 @@ static void bytes_to_hex(const unsigned char *bytes, size_t len, char *hex_out)
 - admin aes encryption key and length
 - pointer to output buffer and placeholder for length (to be determined later)
 */
-static int decrypt_file_to_buffer(const char *file, const unsigned char *key, size_t key_len, unsigned char **plaintext, size_t *plaintext_len)
+static int decrypt_file_to_buffer(const char *file, const unsigned char *key, unsigned char **plaintext, size_t *plaintext_len)
 {
     // open the given file in binary mode
     FILE *fp = fopen(file, "rb");
@@ -485,7 +485,7 @@ static int init_encrypted_accounts(const char *file, const char *key_hex, Accoun
     size_t plaintext_len = 0;
     // decrypt failed
     // environment variable key is incorrect
-    if (decrypt_file_to_buffer(file, key, sizeof key, &plaintext, &plaintext_len) != 0)
+    if (decrypt_file_to_buffer(file, key, &plaintext, &plaintext_len) != 0)
     {
         puts("Failed to decrypt admin file. The key is incorrect.\n");
         return -1;
@@ -737,7 +737,7 @@ void transfer_funds_and_save_to_file(Account *user_accounts_list, size_t user_co
 
 // authenticated admin session
 // can only be accessed by an admin
-void admin_session(Account *admin_account, Account *user_accounts_list, size_t user_count, Account *admin_accounts_list, size_t admin_count, const char *user_file, const char *admin_file)
+void admin_session(Account *admin_account, Account *user_accounts_list, size_t user_count, Account *admin_accounts_list, size_t admin_count, const char *user_file)
 {
     char option[12];
 
@@ -1228,7 +1228,7 @@ int main(void)
             if (authenticate(usernamebuf, passbuf, admin_accounts_list, (size_t)admin_count, &admin_account))
             {
                 // start user session
-                admin_session(&admin_account, user_accounts_list, (size_t)user_count, admin_accounts_list, admin_count, USER_FILE, ADMIN_FILE);
+                admin_session(&admin_account, user_accounts_list, (size_t)user_count, admin_accounts_list, admin_count, USER_FILE);
                 break;
             }
             else
