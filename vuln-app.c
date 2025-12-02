@@ -364,32 +364,31 @@ int get_creds(char usernamebuf[], char passbuf[])
 
 // search through the given accounts list and find if the given username and password
 // match that of any account in the list
-int authenticate(char usernamebuf[], char passbuf[], Account *accounts_list, size_t account_count, Account *auth_account)
+Account *authenticate(char usernamebuf[], char passbuf[], Account *accounts_list, size_t account_count)
 {
     for (size_t i = 0; i < account_count; i++)
     {
         if (strcmp(accounts_list[i].username, usernamebuf) == 0 &&
             strcmp(accounts_list[i].password, passbuf) == 0)
         {
-            if (auth_account)
-            {
-                *auth_account = accounts_list[i];
-            }
-            return 1;
+            return &accounts_list[i];
         }
     }
     // No account matches
-    return 0;
+    return NULL;
 }
+
+// function signature for use in user_session
+void user_transfer_funds_and_save_to_file(Account *from_account, Account *user_accounts_list, size_t user_count, const char *user_file);
 
 // basic user session
 // can only check balance
 // TODO: transfer from personal account only
-void user_session(Account *user_account)
+void user_session(Account *user_account, Account *accounts_list, size_t user_count, const char *file)
 {
     char option[12];
 
-    const char *user_message = "~~~~~~~~~~~~~~~~~\n[1] Check Balance\n[2] Log out\n~~~~~~~~~~~~~~~~~\n";
+    const char *user_message = "~~~~~~~~~~~~~~~~~\n[1] Check Balance\n[2] Transfer Funds\n[3] Log out\n~~~~~~~~~~~~~~~~~\n";
 
     printf("Successfully logged in as user: %s %s\n", user_account->fname, user_account->lname);
 
@@ -420,12 +419,17 @@ void user_session(Account *user_account)
         }
         case '2':
         {
-            printf("Logging out...");
+            user_transfer_funds_and_save_to_file(user_account, accounts_list, user_count, file);
+            break;
+        }
+        case '3':
+        {
+            printf("Logging out...\n");
             return;
         }
         default:
         {
-            printf("Unknown option. Please try again.");
+            printf("Unknown option. Please try again.\n");
             break;
         }
         }
@@ -564,8 +568,143 @@ void print_accounts_table(Account *accounts_list, size_t accounts_list_count)
     printf("%s\n", border);
 }
 
+// allows a user to transfer funds from ONLY THEIR account to any account
+void user_transfer_funds_and_save_to_file(Account *from_account, Account *user_accounts_list, size_t user_count, const char *user_file)
+{
+    char option[12];
+    // initialize pointers to the accounts involved in the trasnfer
+    Account *to_account = NULL;
+
+    while (1)
+    {
+        int rows = print_accounts_by_row(user_accounts_list, user_count);
+        if (rows < 0)
+            printf("Cannot have negative users.");
+
+        // Ask for TO account
+        while (1)
+        {
+            printf("Which account would you like to transfer TO? (q to exit).\n");
+            printf("> ");
+            if (!fgets(option, sizeof option, stdin))
+            {
+                printf("\nEOF received, exiting.");
+                return;
+            }
+            // sanitize and validate option
+            // strip newline
+            size_t len2 = strlen(option);
+            if (len2 && option[len2 - 1] == '\n')
+                option[len2 - 1] = '\0';
+
+            if (strcmp(option, "q") == 0 || strcmp(option, "Q") == 0)
+            {
+                puts("Transfer cancelled.\n");
+                return;
+            }
+
+            // parse option to index and check bounds
+            char *end = NULL;
+            long idx = strtol(option, &end, 10);
+            if (*option == '\0' || *end != '\0' || idx < 0 || (size_t)idx >= user_count)
+            {
+                puts("Invalid choice. Enter the number of one of the listed accounts.");
+                continue;
+            }
+
+            to_account = &user_accounts_list[idx];
+            break;
+        }
+        printf("Selected TO account: %s %s (%s)\n", to_account->fname, to_account->lname, to_account->username);
+
+        // Ask for HOW MUCH to transfer
+        double amount;
+        while (1)
+        {
+            printf("How much would you like to transfer? (q to exit).\n");
+            printf(">");
+            if (!fgets(option, sizeof option, stdin))
+            {
+                printf("\nEOF received, exiting.");
+                return;
+            }
+            size_t len3 = strlen(option);
+            if (len3 && option[len3 - 1] == '\n')
+                option[len3 - 1] = '\0';
+
+            if (strcmp(option, "q") == 0 || strcmp(option, "Q") == 0)
+            {
+                puts("Transfer cancelled.\n");
+                return;
+            }
+
+            char *end = NULL;
+            double value = strtod(option, &end);
+
+            if (*option == '\0' || *end != '\0')
+            {
+                puts("Amount must be a valid number.");
+                continue;
+            }
+            if (value <= 0)
+            {
+                puts("Amount must be positive.");
+                continue;
+            }
+
+            if (value > from_account->balance)
+            {
+                puts("Amount exceeds the FROM account balance.");
+                continue;
+            }
+            amount = value;
+            break;
+        }
+
+        // finalize transfer
+        while (1)
+        {
+            printf("Transfer $%.2f to %s %s? y/n\n", amount, to_account->fname, to_account->lname);
+            printf("> ");
+            if (!fgets(option, sizeof option, stdin))
+            {
+                printf("\nEOF received, exiting.");
+                return;
+            }
+            // sanitize and validate option
+            // strip newline
+            size_t len4 = strlen(option);
+            if (len4 && option[len4 - 1] == '\n')
+                option[len4 - 1] = '\0';
+
+            if (strcmp(option, "y") == 0 || strcmp(option, "Y") == 0)
+            {
+                break;
+            }
+            else if (strcmp(option, "n") == 0 || strcmp(option, "N") == 0)
+            {
+                puts("Transfer cancelled.\n");
+                return;
+            }
+            else
+            {
+                puts("Invalid option. Please try again.");
+            }
+        }
+
+        // transfer the funds
+        from_account->balance = from_account->balance - amount;
+        to_account->balance = to_account->balance + amount;
+
+        puts("Transfer complete");
+        // save updated values to file
+        save_to_file(user_file, user_accounts_list, user_count);
+        break;
+    }
+}
+
 // allows an admin to transfer funds from any account to any account
-void transfer_funds_and_save_to_file(Account *user_accounts_list, size_t user_count, const char *user_file)
+void admin_transfer_funds_and_save_to_file(Account *user_accounts_list, size_t user_count, const char *user_file)
 {
     char option[12];
     // initialize pointers to the accounts involved in the trasnfer
@@ -784,7 +923,7 @@ void admin_session(Account *admin_account, Account *user_accounts_list, size_t u
         }
         case '4':
         {
-            transfer_funds_and_save_to_file(user_accounts_list, user_count, user_file);
+            admin_transfer_funds_and_save_to_file(user_accounts_list, user_count, user_file);
             break;
         }
         case '5':
@@ -1137,10 +1276,6 @@ int main(void)
     Account user_accounts_list[MAX_USERS];
     Account admin_accounts_list[MAX_ADMINS];
 
-    // initialiaze authenticated user or admin account
-    Account user_account;
-    Account admin_account;
-
     int admin_count = 0;
     // read user file and create list of account structs
     int user_count = init_accounts(USER_FILE, user_accounts_list, MAX_USERS);
@@ -1184,10 +1319,11 @@ int main(void)
                 return 1;
             }
             // pass in the inputs and user accounts list
-            if (authenticate(usernamebuf, passbuf, user_accounts_list, (size_t)user_count, &user_account))
+            Account *user_account = authenticate(usernamebuf, passbuf, user_accounts_list, (size_t)user_count);
+            if (user_account)
             {
                 // start user session
-                user_session(&user_account);
+                user_session(user_account, user_accounts_list, (size_t)user_count, USER_FILE);
                 break;
             }
             else
@@ -1225,10 +1361,11 @@ int main(void)
                 return 1;
             }
             // pass in the inputs and user accounts list
-            if (authenticate(usernamebuf, passbuf, admin_accounts_list, (size_t)admin_count, &admin_account))
+            Account *admin_account = authenticate(usernamebuf, passbuf, admin_accounts_list, (size_t)admin_count);
+            if (admin_account)
             {
-                // start user session
-                admin_session(&admin_account, user_accounts_list, (size_t)user_count, admin_accounts_list, admin_count, USER_FILE);
+                // start admin session
+                admin_session(admin_account, user_accounts_list, (size_t)user_count, admin_accounts_list, admin_count, USER_FILE);
                 break;
             }
             else
