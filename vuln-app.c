@@ -30,17 +30,12 @@ typedef struct
 static const char *load_admin_aes_key(void)
 {
     const char *env_key = getenv("ADMIN_AES_KEY");
-    if (env_key && env_key[0] != '\0')
-    {
+    if (env_key && env_key[0] != '\0') {
         return env_key;
-    }
-    // env not set
-    if (ADMIN_AES_KEY[0] != '\0')
-    {
-        return ADMIN_AES_KEY;
+    } else {
+        return "";
     }
 
-    return "";
 }
 
 // helper function to convert a hex string to binary representation
